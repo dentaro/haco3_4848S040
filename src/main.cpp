@@ -1,15 +1,29 @@
+using namespace std;
 #include <Arduino.h>
 #include <FS.h>
 #include "SPIFFS.h"
-#include "haco8/runHaco8Game.h"
-// #include "Tunes.h"
-// #include "Editor.h"
-// #include <PS2Keyboard.h>
-// #include "Speaker_Class.hpp"
-#include <esp_now.h>
-#include <WiFi.h>
+
+// #include <esp_now.h>
+// #include <WiFi.h>
 #include <LovyanGFX_DentaroUI.hpp>
 #include <map>
+
+#include <iostream>
+#include <string>
+#include <vector>
+#include <stdio.h>
+#include <cmath>
+#include "baseGame.h"
+#include <chrono>
+#include <time.h>
+#include <fstream>
+#include "runLuaGame.h"
+#include <sstream>
+#include <map>
+
+#include "baseGame.h"
+#include "runLuaGame.h"
+#include <LovyanGFX_DentaroUI.hpp>
 
 /// 8bit unsigned 44.1kHz mono (exclude wav header)
 // extern const uint8_t wav_unsigned_8bit_click[46000];
@@ -27,7 +41,9 @@ static int menu_y = 20;
 static int menu_w = 120;
 static int menu_h = 30;
 static int menu_padding = 36;
-size_t toolNo = 0;
+// uint8_t toolNo = 0;
+
+#define MAPWH 16//マップのpixelサイズ
 
 #define KEYBOARD_DATA 32
 #define KEYBOARD_CLK  33
@@ -35,6 +51,13 @@ size_t toolNo = 0;
 #define TFT_RUN_MODE 0
 #define TFT_EDIT_MODE 1
 #define TFT_WIFI_MODE 2
+
+#define WIDE_MODE 2 //倍率になっています。
+
+//星のデータ用
+std::vector<std::array<float, 2>> bsParamFloat;
+std::vector<std::array<uint8_t, 1>> bsParamInt8t;
+std::vector<std::array<uint16_t, 1>> bsParamInt16t;
 
 // PS2Keyboard keyboard;
 
@@ -48,6 +71,23 @@ File wfr;
 int isEditMode;
 bool firstBootF = true;
 bool difffileF = false;//前と違うファイルを開こうとしたときに立つフラグ
+
+bool sfxflag = false;
+uint8_t sfxNo = 0;
+uint8_t wavNo = 0;
+uint8_t sfxChNo = 0;
+uint8_t sfxVol = 0;
+float sfxspeed = 100;
+uint8_t patternNo = 0;//0~63
+
+bool enemyF = false;
+uint8_t enemyX = 0;
+uint8_t enemyY = 0;
+uint8_t enemyTransCn = 0;
+String enemyPath = "";
+
+uint8_t toolNo = 0;
+int gameState = 0;
 
 std::deque<int> buttonState;//ボタンの個数未定
 // int buttonState[9];
@@ -72,10 +112,10 @@ char keychar;//キーボードから毎フレーム入ってくる文字
 
 using namespace std;
 
-#define MAX_CHAR 1
+#define MAX_CHAR 512
 #define FORMAT_SPIFFS_IF_FAILED true
 
-#define BUF_PNG_NUM 0
+// #define BUF_PNG_NUM 0
 
 uint8_t mainVol = 180;
 
@@ -92,26 +132,26 @@ uint8_t charSpritex = 0;
 uint8_t charSpritey = 0;
 int pressedBtnID = -1;//この値をタッチボタン、物理ボタンの両方から操作してbtnStateを間接的に操作している
 
-esp_now_peer_info_t slave;
+// esp_now_peer_info_t slave;
 
 int mapsprnos[16];
 
-// int HACO3_C0    = 0x0000;
-// int HACO3_C1    = 6474;//27,42,86 
-// int HACO3_C2    = 35018;
-// int HACO3_C3    = 1097;
-// int HACO3_C4    = 45669;
-// int HACO3_C5    = 25257;
-// int HACO3_C6    = 50712;
-// int HACO3_C7    = 65436;
-// int HACO3_C8    = 63496;//0xF802;
-// int HACO3_C9    = 64768;
-// int HACO3_C10   = 65376;
-// int HACO3_C11   = 1856;
-// int HACO3_C12   = 1407;
-// int HACO3_C13   = 33715;
-// int HACO3_C14   = 64341;
-// int HACO3_C15   = 65108;
+int HACO3_C0    = 0x0000;
+int HACO3_C1    = 6474;//27,42,86 
+int HACO3_C2    = 35018;
+int HACO3_C3    = 1097;
+int HACO3_C4    = 45669;
+int HACO3_C5    = 25257;
+int HACO3_C6    = 50712;
+int HACO3_C7    = 65436;
+int HACO3_C8    = 63496;//0xF802;
+int HACO3_C9    = 64768;
+int HACO3_C10   = 65376;
+int HACO3_C11   = 1856;
+int HACO3_C12   = 1407;
+int HACO3_C13   = 33715;
+int HACO3_C14   = 64341;
+int HACO3_C15   = 65108;
 
 uint8_t clist2[16][3] =
   {
@@ -168,76 +208,32 @@ float matrix_side[6] = {2.0,   // 横2倍
                      0.0    // Y座標
                     };
 
-  static constexpr int HACO3_C0    = 0x0000;
-  static constexpr int HACO3_C1    = 6474;//27,42,86 
-  static constexpr int HACO3_C2    = 35018;
-  static constexpr int HACO3_C3    = 1097;
-  static constexpr int HACO3_C4    = 45669;
-  static constexpr int HACO3_C5    = 25257;
-  static constexpr int HACO3_C6    = 50712;
-  static constexpr int HACO3_C7    = 65436;
-  static constexpr int HACO3_C8    = 63496;//0xF802;
-  static constexpr int HACO3_C9    = 64768;
-  static constexpr int HACO3_C10   = 65376;
-  static constexpr int HACO3_C11   = 1856;
-  static constexpr int HACO3_C12   = 1407;
-  static constexpr int HACO3_C13   = 33715;
-  static constexpr int HACO3_C14   = 64341;
-  static constexpr int HACO3_C15   = 65108;
 
 LGFX screen;//LGFXを継承
 
 LovyanGFX_DentaroUI ui(&screen);
 LGFX_Sprite tft(&screen);
-static LGFX_Sprite logoSprite( &screen );//背景スプライトはディスプレイに出力
-
-// #include "MapDictionary.h"
-// MapDictionary& dict = MapDictionary::getInstance();
 
 LGFX_Sprite sprite88_roi = LGFX_Sprite(&tft);
 LGFX_Sprite sprite11_roi = LGFX_Sprite(&tft);
 LGFX_Sprite sprite64 = LGFX_Sprite();
-// uint8_t sprite64cnos[4096];//64*64
 
-// uint8_t sprite64cnos[PNG_SPRITE_HEIGHT * PNG_SPRITE_WIDTH];//64*128
 std::vector<uint8_t> sprite64cnos_vector;
-
 LGFX_Sprite buffSprite = LGFX_Sprite(&tft);
-
 LGFX_Sprite sprite88_0 = LGFX_Sprite(&tft);
-// LGFX_Sprite sprite22 = LGFX_Sprite(&tft);
-
-// LGFX_Sprite mapTileSprites[1];
-// static LGFX_Sprite sliderSprite( &tft );//スライダ用
-
 BaseGame* game;
-// Tunes tunes;
 String appfileName = "";//最初に実行されるアプリ名
 String savedAppfileName = "";
-// String txtName = "/init/txt/sample.txt";//実行されるファイル名
-
 uint8_t mapsx = 0;
 uint8_t mapsy = 0;
-String mapFileName = "/init/param/map/0.csv";
 int readmapno = 0;
 int divnum = 1;
 bool readMapF = false;
-//divnumが大きいほど少ない領域で展開できる(2の乗数)
-// LGFX_Sprite spritebg[16];//16種類のスプライトを背景で使えるようにする
 LGFX_Sprite spriteMap;//地図用スプライト
 
 int gWx;
 int gWy;
-// int gSpr8numX = 8;
-// int gSpr8numY = 8;
-// int gSprw = 8;
-// int gSprh = 8;
-
-// uint8_t mapArray[MAPWH][MAPWH];
-
 uint8_t mapArray[16][20];//配列はyを先にしている（配列をcsvで手書きしたときの方向を一致させて可読性をよくするため）
-// uint8_t viewArray[3][3];
-// std::vector<std::vector<uint8_t>> mapArray_rl;
 
 bool mapready = false;
 
@@ -246,13 +242,13 @@ int8_t sprbits[128];//fgetでアクセスするスプライト属性を格納す
 char buf[MAX_CHAR];
 // char str[100];//情報表示用
 int mode = 0;//記号モード //0はrun 1はexit
-int gameState = 0;
+// int gameState = 0;
 String appNameStr = "init";
 int soundNo = -1;
 float soundSpeed = 1.0;
 int musicNo = -1;
 bool musicflag = false;
-bool sfxflag = false;
+// bool sfxflag = false;
 bool toneflag = false;
 bool firstLoopF = true;
 
@@ -273,6 +269,8 @@ LGFX_Sprite sprref;
 String oldKeys[BUF_PNG_NUM];
 
 uint8_t masterVol = 64;
+
+String mapFileName = "/init/map/0.png";
 // getSign関数をMapDictionaryクラス外に移動
 Vector2<int> getSign(int dirno) {
     if (dirno == -1) {
@@ -359,15 +357,15 @@ int readMap()
 }
 
 // 送信コールバック
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  char macStr[18];
-  snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
-           mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-  tft.print("Last Packet Sent to: ");
-  tft.println(macStr);
-  tft.print("Last Packet Send Status: ");
-  tft.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-}
+// void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+//   char macStr[18];
+//   snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
+//            mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+//   tft.print("Last Packet Sent to: ");
+//   tft.println(macStr);
+//   tft.print("Last Packet Send Status: ");
+//   tft.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+// }
 
 // 受信コールバック
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len) {
@@ -439,13 +437,13 @@ void printDownloadKeys() {
 
 void drawUI()
 {
-  logoSprite.setPsram(false);
-  logoSprite.setColorDepth(16);    // 子スプライトの色深度
-  logoSprite.createSprite(48, 38); // ゲーム画面用スプライトメモリ確保
+  // logoSprite.setPsram(false);
+  // logoSprite.setColorDepth(16);    // 子スプライトの色深度
+  // logoSprite.createSprite(48, 38); // ゲーム画面用スプライトメモリ確保
 
   // PNGをバッファに書いて2倍出力
-  logoSprite.drawPngFile(SPIFFS, "/init/logo.png", 0, 0); // 4ボタン
-  logoSprite.pushAffine(matrix_side);
+  // logoSprite.drawPngFile(SPIFFS, "/init/logo.png", 0, 0); // 4ボタン
+  // logoSprite.pushAffine(matrix_side);
 
   // メモリを解放するのは後で行うこと
 
@@ -482,7 +480,7 @@ void drawUI()
   // screen.fillRoundRect(x1, 204, x2 + 30, 38, cornerRadius, TFT_LIGHTGRAY);
 
   // スプライトの解放
-  logoSprite.deleteSprite();
+  // logoSprite.deleteSprite();
 
 }
 
@@ -507,6 +505,8 @@ FileType detectFileType(String *appfileName)
   return FileType::OTHER;
 }
 
+#include "runLuaGame.h"
+
 String *targetfileName;
 BaseGame* nextGameObject(String* _appfileName, int _gameState, String _mn)
 {
@@ -516,15 +516,15 @@ BaseGame* nextGameObject(String* _appfileName, int _gameState, String _mn)
       // game = new RunJsGame(); 
       break;
     case FileType::LUA: 
-      game = new RunHaco8Game(_gameState, _mn);
+      game = new runLuaGame(_gameState, _mn);
       break;
     case FileType::TXT: 
       // game = new RunJsGame(); 
       // //ファイル名がもし/init/param/caldata.txtなら
       // if(*_appfileName == CALIBRATION_FILE)
       // {
-      //   ui.calibrationRun(screen);//キャリブレーション実行してcaldata.txtファイルを更新して
-      //   drawUI();//サイドボタンを書き直して
+      //   ui.calibrationRun(tft);//キャリブレーション実行してcaldata.txtファイルを更新して
+      //   drawLogo();//サイドボタンを書き直して
       // }
       // appfileName = "/init/txt/main.js";//txtエディタで開く
       break; //txteditorを立ち上げてtxtを開く
@@ -560,34 +560,31 @@ void runFileName(String s){
 
 }
 
-
 int getcno2tftc(uint8_t _cno){
   switch (_cno)
   {
-  case -1:return NULL;break;
-  case 0:return RunHaco8Game::HACO3_C0;break;
-  case 1:return RunHaco8Game::HACO3_C1;break;
-  case 2:return RunHaco8Game::HACO3_C2;break;
-  case 3:return RunHaco8Game::HACO3_C3;break;
-  case 4:return RunHaco8Game::HACO3_C4;break;
-  case 5:return RunHaco8Game::HACO3_C5;break;
-  case 6:return RunHaco8Game::HACO3_C6;break;
-  case 7:return RunHaco8Game::HACO3_C7;break;
-  case 8:return RunHaco8Game::HACO3_C8;break;
-  case 9:return RunHaco8Game::HACO3_C9;break;
-  case 10:return RunHaco8Game::HACO3_C10;break;
-  case 11:return RunHaco8Game::HACO3_C11;break;
-  case 12:return RunHaco8Game::HACO3_C12;break;
-  case 13:return RunHaco8Game::HACO3_C13;break;
-  case 14:return RunHaco8Game::HACO3_C14;break;
-  case 15:return RunHaco8Game::HACO3_C15;break;
+  case 0:return HACO3_C0;break;
+  case 1:return HACO3_C1;break;
+  case 2:return HACO3_C2;break;
+  case 3:return HACO3_C3;break;
+  case 4:return HACO3_C4;break;
+  case 5:return HACO3_C5;break;
+  case 6:return HACO3_C6;break;
+  case 7:return HACO3_C7;break;
+  case 8:return HACO3_C8;break;
+  case 9:return HACO3_C9;break;
+  case 10:return HACO3_C10;break;
+  case 11:return HACO3_C11;break;
+  case 12:return HACO3_C12;break;
+  case 13:return HACO3_C13;break;
+  case 14:return HACO3_C14;break;
+  case 15:return HACO3_C15;break;
 
   default:
-  return RunHaco8Game::HACO3_C0;
+  return HACO3_C0;
     break;
   }
 }
-
 
 // タイマー
 hw_timer_t * timer = NULL;
@@ -652,9 +649,6 @@ String rFirstAppName(String _wrfile){
   return _readStr;
 }
 
-#include <Arduino.h>
-#include <SPIFFS.h>
-
 void decompressData(const char *filename, std::vector<std::vector<uint8_t>> &output) {
 
 }
@@ -664,7 +658,6 @@ int readMap(String _mapFileName, int startCol, int startRow) {
 
   return 1;
 }
-
 
 void getOpenConfig()
 {
@@ -700,10 +693,7 @@ void getOpenConfig()
     }
 
     sprbits[i] = bdata;
-    // Serial.print(":");
-    // Serial.print(bdata); // 0～255
-    // Serial.print(":");
-    // Serial.println("end");
+
   }
   fr.close();
 
@@ -751,8 +741,8 @@ void getOpenConfig()
         if(i==1){
         appNameStr = s.c_str();
 
-        Serial.print("/" + appNameStr + "/mapinfo.txt");
-        Serial.println("<-------");
+        // Serial.print("/" + appNameStr + "/mapinfo.txt");
+        // Serial.println("<-------");
 
         fr = SPIFFS.open("/" + appNameStr + "/mapinfo.txt", "r");// ⑩ファイルを読み込みモードで開く
       }
@@ -767,8 +757,8 @@ void getOpenConfig()
       int startIndex = 0;
 
       if (!line.isEmpty()) {
-          Serial.print(line);
-          Serial.println("<--------");
+          // Serial.print(line);
+          // Serial.println("<--------");
 
           while (j < 16) {
               int commaIndex = line.indexOf(',', startIndex);
@@ -794,23 +784,7 @@ void getOpenConfig()
       }
   }
   fr.close();
-
   mapFileName = "/init/param/map/"+_readStr;
-  Serial.print(mapFileName);
-  Serial.println("<--------------");
-
-  for(int i = 0;i<16;i++){
-    Serial.print(mapsprnos[i]);
-    Serial.print(",");
-  }
-  Serial.println("<--------------");
-
-  //起動時にワールドマップ情報をファイルに展開しておく
-
-  // readMap(mapFileName);
-
-
-
 }
 
 void setOpenConfig(String fileName, int _isEditMode) {
@@ -830,29 +804,8 @@ void setOpenConfig(String fileName, int _isEditMode) {
   fw.close(); // ファイルを閉じる
 }
 
-
-using namespace std;
-#include <iostream>
-#include <string>
-#include <vector>
-#include <stdio.h>
-#include <sstream>
-#include <cmath>
-
-using namespace std;
-
-// vector<string> split(string& input, char delimiter)
-// {
-//     istringstream stream(input);
-//     string field;
-//     vector<string> result;
-//     while (getline(stream, field, delimiter)) {
-//         result.push_back(field);
-//     }
-//     return result;
-// }
-
 void setTFTedit(int _iseditmode){
+  
   tft.setPsram( false );//DMA利用のためPSRAMは切る
   tft.createSprite( TFT_WIDTH, TFT_HEIGHT );//PSRAMを使わないギリギリ
   tft.startWrite();//CSアサート開始
@@ -944,41 +897,41 @@ void restart(String _fileName, int _isEditMode)
 
 
 void broadchat() {
-  if ("/init/chat/m.txt" == NULL) return;
-  File fp = SPIFFS.open("/init/chat/m.txt", FILE_READ); // SPIFFSからファイルを読み込み
+  // if ("/init/chat/m.txt" == NULL) return;
+  // File fp = SPIFFS.open("/init/chat/m.txt", FILE_READ); // SPIFFSからファイルを読み込み
 
-  if (!fp) {
-    // editor.editorSetStatusMessage("Failed to open file");
-    return;
-  }
+  // if (!fp) {
+  //   // editor.editorSetStatusMessage("Failed to open file");
+  //   return;
+  // }
 
-  std::vector<uint8_t> data;
-  while (fp.available()) {
-    char c = fp.read();
-    data.push_back(c);
-    if (data.size() >= 150) {
-      esp_err_t result = esp_now_send(slave.peer_addr, data.data(), data.size());
-      data.clear(); // データを送信したらクリア
-      if (result != ESP_OK) {
-        // editor.editorSetStatusMessage("Failed to send message");
-        fp.close();
-        return;
-      }
-    }
-  }
+  // std::vector<uint8_t> data;
+  // while (fp.available()) {
+  //   char c = fp.read();
+  //   data.push_back(c);
+  //   if (data.size() >= 150) {
+  //     esp_err_t result = esp_now_send(slave.peer_addr, data.data(), data.size());
+  //     data.clear(); // データを送信したらクリア
+  //     if (result != ESP_OK) {
+  //       // editor.editorSetStatusMessage("Failed to send message");
+  //       fp.close();
+  //       return;
+  //     }
+  //   }
+  // }
 
-  // ファイルの残りのデータを送信
-  if (data.size() > 0) {
-    esp_err_t result = esp_now_send(slave.peer_addr, data.data(), data.size());
-    if (result != ESP_OK) {
-      // editor.editorSetStatusMessage("Failed to send message");
-      fp.close();
-      return;
-    }
-  }
+  // // ファイルの残りのデータを送信
+  // if (data.size() > 0) {
+  //   esp_err_t result = esp_now_send(slave.peer_addr, data.data(), data.size());
+  //   if (result != ESP_OK) {
+  //     // editor.editorSetStatusMessage("Failed to send message");
+  //     fp.close();
+  //     return;
+  //   }
+  // }
 
-  fp.close();
-  // editor.editorSetStatusMessage("Message sent");
+  // fp.close();
+  // // editor.editorSetStatusMessage("Message sent");
 }
 
 
@@ -1111,14 +1064,11 @@ void safeReboot(){
 
 void setup()
 {
-  pinMode(OUTPIN_0, OUTPUT);
-  pinMode(INPIN_0, INPUT);
+  // pinMode(OUTPIN_0, OUTPUT);
+  // pinMode(INPIN_0, INPUT);
 
   Serial.begin(115200);
-  // keyboard.begin(KEYBOARD_DATA, KEYBOARD_CLK);
-
   // editor.getCursorConfig("/init/param/editor.txt");//エディタカーソルの位置をよみこむ
-
   delay(50);
   if(firstBootF == true){
     difffileF = false;
@@ -1138,99 +1088,6 @@ void setup()
   getOpenConfig();//最初に立ち上げるゲームのパスとモードをSPIFFSのファイルopenconfig.txtから読み込む
   //この時点でappfileNameも更新される
 
-  
-
-
-//   File fr;
-//   //アプリのパスからアプリ名を取得
-//   string str1 = appfileName.c_str();
-//   int i=0;
-
-//   // for (string s : split(str1,'/')) {
-//   //   if(i==1){
-//   //     appNameStr = s.c_str();
-//   //     fr = SPIFFS.open("/" + appNameStr + "/mapinfo.txt", "r");// ⑩ファイルを読み込みモードで開く
-//   //   }
-//   //    i++;
-//   // }
-// // String appNameStr;
-//   String line;
-//   String _readStr;
-
-//   while (fr.available()) {
-//     line = fr.readStringUntil('\n');
-//     int j = 0; // 列のインデックス
-//     int startIndex = 0;
-//     if (!line.isEmpty()) {
-
-//       Serial.println(line);
-//         while (j < 17) {
-//           int commaIndex = line.indexOf(',', startIndex);
-//           if(j==16){//0から数えて16番目がアプリ名
-//             appNameStr  = line.substring(startIndex, commaIndex);
-//             fr = SPIFFS.open("/" + appNameStr + "/mapinfo.txt", "r");// ⑩ファイルを読み込みモードで開く
-//           }
-//         j++;
-//       }
-
-//       i++;
-
-//     }
-//   }
-
-  
-//   i = 0; // 行のインデックス
-
-//   while (fr.available()) {
-//     line = fr.readStringUntil('\n');
-//     int j = 0; // 列のインデックス
-//     int startIndex = 0;
-//     if (!line.isEmpty()) {
-
-//       // Serial.println(line);
-//         while (j < 17) {
-//           int commaIndex = line.indexOf(',', startIndex);
-//           if(j<16){
-//             if (commaIndex == -1) {
-//               commaIndex = line.length();
-//             }
-//             String token = line.substring(startIndex, commaIndex);
-//             mapsprnos[j] = token.toInt();
-//             startIndex = commaIndex + 1;
-//           }else{
-//             _readStr = line.substring(startIndex, commaIndex);
-//           }
-//         j++;
-//       }
-
-//       i++;
-
-//     }
-//   }
-
-
-  
-
-  // String _readStr;
-  // for(int i= 0;i<16;i++){//マップを描くときに使うスプライト番号リストを読み込む
-  //   _readStr = fr.readStringUntil(',');// ⑪,まで１つ読み出し
-  //   mapsprnos[i] = atoi(_readStr.c_str());
-  // }
-
-  // Serial.println("->");
-  // Serial.print(_readStr);
-
-  // _readStr = fr.readStringUntil(',');// 最後はマップのパス
-
-  // _readStr = "2.txt";//強制的に入れる
-
-  // mapFileName = "/init/param/map/"+_readStr;
-  // fr.close();	// ⑫	ファイルを閉じる
-
-  //この時点でmapFileNameが更新される
-  // readMap(mapFileName);
-  // delay(50);
-
   if(isEditMode == TFT_RUN_MODE){
 
     if(firstBootF == false){
@@ -1239,42 +1096,12 @@ void setup()
     }
     setTFTedit(TFT_RUN_MODE);
 
-    //   //外部物理ボタンの設定
-    // adc1_config_width(ADC_WIDTH_BIT_12);
-    // //何ビットのADCを使うか設定する。今回は12bitにします。
-    // //adc1の場合はこのように使うチャンネル全体の設定をするコマンドが用意されている。
-    // adc1_config_channel_atten(ADC1_CHANNEL_3, ADC_ATTEN_DB_11);//39pin　4つのボタン
-    // adc1_config_channel_atten(ADC1_CHANNEL_5, ADC_ATTEN_DB_11);//33pin　ボリューム
-    // adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_DB_11);//34pin　ジョイスティックX
-    // adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_11);//35pin　ジョイスティックY
-    
-    // ui.begin( screen, 16, 0, 1);
     ui.begin( screen, 16, 0, 0);//タッチキャリブレーションをしない
     screen.fillScreen(TFT_BLACK);
     drawUI();//UIを表示
-
-    // ui.createSliders( 0, 160, 240, 160, 2, 1, XY_VAL, MULTI_EVENT );
-    // ui.setBtnName( ui.getUiID("SLIDER_0"), "2DSlider0" );
-    // ui.setBtnName( ui.getUiID("SLIDER_0")+1, "2DSlider1" );
-
-    //sin 0~90度をメモリに保持する
-    // for (int i = 0; i < 90; ++i) {
-    //   float radians = i * M_PI / 180.0;
-    //   sinValues[i] = sin(radians);
-    // }
-    // sinValues[90] = 1.0;
-    // sinValues[270] = -1.0;
-
     sprite88_0.setPsram(false );
     sprite88_0.setColorDepth(16);//子スプライトの色深度
     sprite88_0.createSprite(8, 8);//ゲーム画面用スプライトメモリ確保
-
-    // sprite22.setPsram(false );
-    // sprite22.setColorDepth(16);//子スプライトの色深度
-    // sprite22.createSprite(8, 8);//ゲーム画面用スプライトメモリ確保
-    
-
-    //sprite88_0.drawPngFile(SPIFFS, "/init/sprite.png", -8*1, -8*0);
 
     sprite64.setPsram(false );
     sprite64.setColorDepth(16);//子スプライトの色深度
@@ -1476,27 +1303,27 @@ void setup()
       WiFi.mode(WIFI_STA);
       WiFi.disconnect();
 
-      if (esp_now_init() == ESP_OK) {
-        tft.println("ESPNow Init Success");
-      } else {
-        tft.println("ESPNow Init Failed");
-        ESP.restart();
-      }
+      // if (esp_now_init() == ESP_OK) {
+      //   tft.println("ESPNow Init Success");
+      // } else {
+      //   tft.println("ESPNow Init Failed");
+      //   ESP.restart();
+      // }
 
       // マルチキャスト用Slave登録
-      memset(&slave, 0, sizeof(slave));
-      for (int i = 0; i < 6; ++i) {
-        slave.peer_addr[i] = (uint8_t)0xff;
-      }
+      // memset(&slave, 0, sizeof(slave));
+      // for (int i = 0; i < 6; ++i) {
+      //   slave.peer_addr[i] = (uint8_t)0xff;
+      // }
       
-      esp_err_t addStatus = esp_now_add_peer(&slave);
-      if (addStatus == ESP_OK) {
-        // Pair success
-        tft.println("Pair success");
-      }
-      // ESP-NOWコールバック登録
-      esp_now_register_send_cb(OnDataSent);
-      esp_now_register_recv_cb(OnDataRecv);
+      // esp_err_t addStatus = esp_now_add_peer(&slave);
+      // if (addStatus == ESP_OK) {
+      //   // Pair success
+      //   tft.println("Pair success");
+      // }
+      // // ESP-NOWコールバック登録
+      // esp_now_register_send_cb(OnDataSent);
+      // esp_now_register_recv_cb(OnDataRecv);
 
     }
 
@@ -1680,29 +1507,15 @@ void loop()
   uint32_t remainTime = (currentTime - preTime);
   preTime = currentTime;
 
-  // M5Cardputer.update();
-
-  // if (M5Cardputer.Keyboard.isPressed() == 0) {
-  //     keychar = NULL;
-  //     if(pressedBtnID != -1){buttonState[pressedBtnID] = -1;}
-  //       pressedBtnID = -1;//リセット   
-  // }
-
-  // ui.setConstantGetF(true);//trueだとタッチポイントのボタンIDを連続取得するモード
   ui.update(screen);//タッチイベントを取るので、LGFXが基底クラスでないといけない
-
-
   
   if( ui.getEvent() != NO_EVENT ){//何かイベントがあれば
-    
-
     if( ui.getEvent() == TOUCH ){//TOUCHの時だけ
 
       if(pressedBtnID != -1){buttonState[pressedBtnID] = -1;}
         // pressedBtnID = -1;//リセット   
-
-      
     }
+    
     if(ui.getEvent() == MOVE){
       if(ui.getTouchBtnID() == -1){
         pressedBtnID = -1;
@@ -1735,12 +1548,12 @@ if (elapsedTime >= 1000/fps||fps==-1) {
 
 
   if( isEditMode == TFT_RUN_MODE ){
+
     //ゲーム内のprint時の文字設定をしておく
-    
-    // tft.setTextSize(1);//サイズ
-    // tft.setFont(&lgfxJapanGothicP_8);//日本語可
-    // tft.setCursor(0, 0);//位置
-    // tft.setTextWrap(true);
+    tft.setTextSize(1);//サイズ
+    tft.setFont(&lgfxJapanGothicP_8);//日本語可
+    tft.setCursor(0, 0);//位置
+    tft.setTextWrap(true);
 
     // == tune task ==
     // tunes.run();
@@ -1748,28 +1561,38 @@ if (elapsedTime >= 1000/fps||fps==-1) {
     // == game task ==
     mode = game->run(remainTime);//exitは1が返ってくる　mode=１ 次のゲームを起動
 
+    if(pressedBtnID == 10){//(|)
+    // appfileName = 
+      // editor.editorSave(SPIFFS);//SPIFFSに保存
+      delay(100);//ちょっと待つ
+      reboot(appfileName, TFT_RUN_MODE);//現状rebootしないと初期化が完全にできない
+      // restart(appfileName, 0);//初期化がうまくできない（スプライトなど）
+      // broadchat();//ファイルの中身をブロードキャスト送信する（ファイルは消えない）
+    }
+
+
     //ESCボタンで強制終了
     if (pressedBtnID == 0)
     { // reload
 
-      // editor.setCursorConfig(0,0,0);//カーソルの位置を強制リセット保存
-      // delay(50);
-
-      ui.setConstantGetF(false);//初期化処理 タッチポイントの常時取得を切る
       appfileName = "/init/main.lua";
-      
+
+      patternNo = 0;//音楽開始位置を0にリセット
+
       firstLoopF = true;
       toneflag = false;
       sfxflag = false;
       musicflag = false;
-      // wfr.close();//起動時に展開したワールドマップ用のファイルを閉じる
 
       mode = 1;//exit
+      // 星用のベクター配列使用後は要素数を0にする
+      bsParamFloat.resize(0);
+      bsParamInt8t.resize(0);
+      bsParamInt16t.resize(0);
     }
 
     if (pressedBtnID == 9999)
     { // reload
-      ui.setConstantGetF(false);//初期化処理 タッチポイントの常時取得を切る
       mode = 1;//exit
       pressedBtnID = -1;
     }
@@ -1783,52 +1606,53 @@ if (elapsedTime >= 1000/fps||fps==-1) {
       toneflag = false;
       sfxflag = false;
       musicflag = false;
+      fps = 60;
       // txtName = appfileName;
       game = nextGameObject(&appfileName, gameState, mapFileName);//ファイルの種類を判別して適したゲームオブジェクトを生成
       game->init();//resume()（再開処理）を呼び出し、ゲームで利用する関数などを準備
       // tunes.resume();
-      
     }
-
+    
     // ui.showTouchEventInfo( tft, 0, 100 );//タッチイベントを視覚化する
-    ui.showInfo( tft, 0, 0+8 );//ボタン情報、フレームレート情報などを表示します。
+    // if(patternNo<10)tft.fillRect(200,120,16,8,TFT_BLACK);
+    ui.showInfo( tft, 200, 112 );//ボタン情報、フレームレート情報などを表示します。
+    // tft.setCursor(200,120);
+    // tft.println(patternNo);
+    
 
-    // spriteMap.drawPngFile(SPIFFS, "/init/param/map/0.png", 0, 0); 
-    // spriteMap.fillScreen(TFT_BLUE);
+    // if(enemyF){
 
+    //   sprite64.setPsram(false);
+    //   sprite64.setColorDepth(16);    // 子スプライトの色深度
+    //   sprite64.createSprite(48, 48); // ゲーム画面用スプライトメモリ確保
 
-    // spriteMap.pushSprite(&tft, 0,0);
+    //   // sprite64.drawPngFile(SPIFFS, enemyPath, enemyX, enemyY);//sprite64に展開する
+    //   sprite64.pushRotateZoom(&tft, enemyX, enemyY, 0, 1, 1, gethaco3Col(enemyTransCn));
 
-  
-    // if(outputMode == WIDE_MODE){
-      // tft.pushAffine(matrix_game);//ゲーム画面を最終描画する
-      if(toolNo != 0){
-        if(toolNo==1){//カラーパレット
-          for(int j = 0; j<8; j++){
-            for(int i = 0; i<2; i++){
-              screen.fillRect(i*16,j*16,16,16,getcno2tftc(j*2+i));
-            }
-          }
-        }
+    //   sprite64.deleteSprite();//消す
 
-        toolNo = 0;
-      }
+    //   // tft.drawPngFile(SPIFFS, enemyPath, enemyX, enemyY);//直接展開する
+    // }
 
+    //   if(toolNo != 0){
+    //     if(toolNo==1){//カラーパレット
+    //       for(int j = 0; j<8; j++){
+    //         for(int i = 0; i<2; i++){
+    //           tft.fillRect(i*16,j*16,16,16,gethaco3Col(j*2+i));
+    //         }
+    //       }
+    //     }
 
-  screen.startWrite();
-  // tft.setRotation(++cnt & 7);
+    //     toolNo = 0;
+    //   }
 
-  // int32_t ix, iy;
-  // if (screen.getTouch(&ix, &iy)) {
-  //   screen.fillRect(ix-25, iy-25, 50, 50, TFT_YELLOW);
-  // }
-
+    
 
     //Affineを使わない書き方
     tft.setPivot(0, 0);
 
-    // tft.pushRotateZoom(&screen, 40 , 0  , 0, 2, 2);//最大1.2倍までしか描画できない//PSRAMを使わないギリギリ
-    tft.pushRotateZoom(&screen, 40 , 0  , 0, 1, 1);
+    tft.pushRotateZoom(&screen, 40 , 0  , 0, 2, 2);//最大1.2倍までしか描画できない//PSRAMを使わないギリギリ
+    // tft.pushRotateZoom(&screen, 40 , 0  , 0, 1, 1);
     // tft.pushRotateZoom(&screen, 40 , 128, 0, 1.0, 1.0);
     // tft.pushRotateZoom(&screen, 200, 0  , 0, 1.0, 1.0);
     // tft.pushRotateZoom(&screen, 200, 128, 0, 1.0, 1.0);

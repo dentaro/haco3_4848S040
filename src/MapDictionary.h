@@ -8,8 +8,8 @@
 #include <Arduino.h>
 #include <FS.h>
 #include "SPIFFS.h"
-// // #include "runLuaGame.h"
-// #include "haco8/runHaco8Game.h"
+// // #include "RunLuaGame.h"
+// #include "haco8/RunHaco8Game.h"
 
 // #include "Tunes.h"
 // #include "runJsGame.h"
