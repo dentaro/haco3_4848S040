@@ -5,7 +5,6 @@ using namespace std;
 
 // #include <esp_now.h>
 // #include <WiFi.h>
-#include <LovyanGFX_DentaroUI.hpp>
 #include <map>
 
 #include <iostream>
@@ -25,6 +24,18 @@ using namespace std;
 #include "runLuaGame.h"
 #include <LovyanGFX_DentaroUI.hpp>
 
+#include <LovyanGUI.hpp>
+#include "Editor.h"
+
+
+//キーボード関連
+Editor editor;
+
+static lgui::LovyanGUI gui;             // GUIライブラリのインスタンス
+static lgui::LGUI_TextBox textbox;      // テキストボックス
+// static lgui::LGUI_GridView grid;        // グリッドビュー
+// static std::vector<std::string> gridstrs(26*30); // グリッドの文字列保持用変数
+
 /// 8bit unsigned 44.1kHz mono (exclude wav header)
 // extern const uint8_t wav_unsigned_8bit_click[46000];
 // extern const uint8_t wav_unsigned_8bit_click[16];
@@ -32,6 +43,8 @@ using namespace std;
 /// wav data (include wav header)
 // extern const uint8_t wav_with_header[230432];
 // extern const uint8_t wav_with_header[16];
+bool textMoveF = false;
+bool shiftF = false;
 
 uint8_t sprno;
 uint8_t repeatnum;
@@ -54,14 +67,15 @@ static int menu_padding = 36;
 
 #define WIDE_MODE 2 //倍率になっています。
 
+//UI設定用
+#define GAME_UI 0
+#define QWERTY_UI 1
+uint8_t UImodeNo = QWERTY_UI;
+
 //星のデータ用
 std::vector<std::array<float, 2>> bsParamFloat;
 std::vector<std::array<uint8_t, 1>> bsParamInt8t;
 std::vector<std::array<uint16_t, 1>> bsParamInt16t;
-
-// PS2Keyboard keyboard;
-
-// Speaker_Class speaker;
 
 uint64_t frame = 0;
 
@@ -181,6 +195,21 @@ int convUiId[25] = {
  7, 4, 8,-1,11,
 -1,-1,-1, 0,-1,
 };
+
+// int convUiId0[12] = {
+//  5, 3, 6,10,
+//  1, 9, 2,11,
+//  7, 4, 8, 0,
+// };
+// char convUiId1[60] = {
+// 'Q','W','E','R','T','Y','U','I','O','P',
+// 'A','S','D','F','G','H','J','K','L','x',
+// 'l','Z','X','C','V','B','N','M','z','t',
+// '5','3','6','a','f','_','y','f',' ',' ',
+// '1','9','2','b','_','_','_',' ',' ',' ',
+// '7','4','8','0',' ',' ',' ',' ',' ',' ',
+// };
+
 const uint8_t RGBValues[][3] PROGMEM = {//16bit用
   {0, 0, 0},     // 0: 黒色=なし
   {24, 40, 82},  // 1: 暗い青色
@@ -282,6 +311,7 @@ Vector2<int> getSign(int dirno) {
         return {int(dx), int(dy)};
     }
 }
+
 
 
 int readMap()
@@ -435,42 +465,49 @@ void printDownloadKeys() {
   Serial.println("");
 }
 
+// enum UImodeNo{
+//    GAME_UI = 0
+//   ,QWERTY_UI = 1
+// };
+
 void drawUI()
 {
-  // logoSprite.setPsram(false);
-  // logoSprite.setColorDepth(16);    // 子スプライトの色深度
-  // logoSprite.createSprite(48, 38); // ゲーム画面用スプライトメモリ確保
-
-  // PNGをバッファに書いて2倍出力
-  // logoSprite.drawPngFile(SPIFFS, "/init/logo.png", 0, 0); // 4ボタン
-  // logoSprite.pushAffine(matrix_side);
-
-  // メモリを解放するのは後で行うこと
-
   // fillRoundRectの最適化
   uint16_t x1 = 0;
-  uint16_t y1 = 256;
+  uint16_t y1 = 80;
   uint16_t bw = 48;
   uint16_t bh = 38;
   uint16_t cornerRadius = 5;
   uint16_t color = TFT_DARKGRAY;
 
-  
   screen.setTextColor(TFT_DARKGRAY, TFT_BLACK);
   screen.setTextSize(2);//サイズ
   // screen.setFont(&lgfxJapanGothicP_8);//日本語可
   // screen.setTextWrap(true);
   // // screen.setClipRect(160, 0, 60, 128);
 
-  for (int j = 0; j < 5; j++) {
-      for (int i = 0; i < 5; i++) {
-        if(convUiId[j*5+i] != -1){
-          screen.drawRoundRect(x1 + bw * i, y1 + bh * j, bw, bh, cornerRadius, color);
-          screen.setCursor(x1 + bw * i +8, y1 + bh * j +8);
-          screen.print(convUiId[j*5+i]);
+  // if(UImodeNo == GAME_UI){
+    for (int j = 0; j < 5; j++) {
+        for (int i = 0; i < 5; i++) {
+          if(convUiId[j*5+i] != -1){
+            screen.drawRoundRect(x1 + bw * i, y1 + bh * j, bw, bh, cornerRadius, color);
+            screen.setCursor(x1 + bw * i +8, y1 + bh * j +8);
+            screen.print(convUiId[j*5+i]);
+          }
         }
-      }
-  }
+    }
+  // }
+  // else if(UImodeNo == QWERTY_UI){
+  //   for (int j = 0; j < 6; j++) {
+  //       for (int i = 0; i < 10; i++) {
+  //         if(convUiId1[j*10+i] != ' '){
+  //           screen.drawRoundRect(x1 + bw * i, y1 + bh * j, bw, bh, cornerRadius, color);
+  //           screen.setCursor(x1 + bw * i +8, y1 + bh * j +8);
+  //           screen.print(convUiId1[j*10+i]);
+  //         }
+  //       }
+  //   }
+  // }
 
   // screen.fillRoundRect(x1, 124, x2 + 30, 38, cornerRadius, TFT_LIGHTGRAY);
 
@@ -867,7 +904,7 @@ int btn(int btnno)
 void reboot(String _fileName, int _isEditMode)
 {
   setOpenConfig(_fileName, _isEditMode);
-  // editor.setCursorConfig();//カーソルの位置を保存
+  editor.setCursorConfig();//カーソルの位置を保存
   delay(100);
   ESP.restart();
 }
@@ -876,8 +913,8 @@ void restart(String _fileName, int _isEditMode)
 {
   setOpenConfig(_fileName, _isEditMode);
   
-  // editor.setCursorConfig();//カーソルの位置を保存
-  // delay(100);
+  editor.setCursorConfig();//カーソルの位置を保存
+  delay(100);
 
   firstBootF = false;
   setup();
@@ -1044,7 +1081,7 @@ size_t cursor_index = 0;
 
 
 void safeReboot(){
-  // editor.setCursorConfig(0,0,0);//カーソルの位置を強制リセット保存
+  editor.setCursorConfig(0,0,0);//カーソルの位置を強制リセット保存
       delay(50);
 
       ui.setConstantGetF(false);//初期化処理 タッチポイントの常時取得を切る
@@ -1055,20 +1092,73 @@ void safeReboot(){
       sfxflag = false;
       musicflag = false;
 
-      // editor.editorSave(SPIFFS);//SPIFFSに保存
+      editor.editorSave(SPIFFS);//SPIFFSに保存
       delay(100);//ちょっと待つ
       reboot(appfileName, TFT_RUN_MODE);//現状rebootしないと初期化が完全にできない
 }
+void lguisetup(){
 
+  gui.colorDepth = 8;
+  gui.setup(&screen);
+
+/*
+  gui.colorMask = 0xFF00FFU;
+  gui.colorFrameInactive    = 0x999999U;
+  gui.colorFrameActive      = 0x1F7FFFU;
+  gui.colorCursorInactive   = 0xCCCCCCU;
+  gui.colorCursorActive     = 0x7F7FFFU;
+  gui.colorSubCursorInactive= 0xEEEEEEU;
+  gui.colorSubCursorActive  = 0xBBBBFFU;
+  gui.colorBorder           = 0x000000U;
+  gui.colorFixed            = 0xBFBFBFU;
+  gui.colorBack             = 0xFFFFFFU;
+*/
+/*/
+  canvas.setColorDepth(4);
+  canvas.createPalette();
+
+  gui.colorMask = 0;
+  gui.colorFrameInactive    = 1;   canvas.setPaletteColor(1, 0x999999U);
+  gui.colorFrameActive      = 2;   canvas.setPaletteColor(2, 0x1F7FFFU);
+  gui.colorCursorInactive   = 3;   canvas.setPaletteColor(3, 0x888888U);
+  gui.colorCursorActive     = 4;   canvas.setPaletteColor(4, 0x005FFFU);
+  gui.colorSubCursorInactive= 5;   canvas.setPaletteColor(5, 0x777777U);
+  gui.colorSubCursorActive  = 6;   canvas.setPaletteColor(6, 0x6666AAU);
+  gui.colorBorder = 12;   canvas.setPaletteColor(12, 0x000000U);
+  gui.colorFixed  = 13;   canvas.setPaletteColor(13, 0x555555U);
+  gui.colorBack   = 14;   canvas.setPaletteColor(14, 0x333333U);
+  gui.smoothMove = 32;           // スムーズ移動係数 (0でスムーズ移動無効)
+
+//*/
+
+  // スクリーンキーボードの設定
+  auto osk = gui.getKeyboard();
+  
+  osk->frameWidth = 0;
+  osk->setFont(&fonts::Font0);
+  auto osk_hight = osk->getDestRect().height();
+
+  textbox.setDestRect(0, screen.height()-osk_hight-16, screen.width(), 16);
+
+  textbox.setHideRect(0, screen.height()-osk_hight-16, 0, 16);
+  textbox.hide();
+
+//osk.setup(0, screen.height()/2-64, screen.width(), 64);
+//osk.input(lgui::input_none);
+
+  gui.addControl(&textbox);
+  // gui.addControl(&grid);
+}
 
 
 void setup()
 {
+  
   // pinMode(OUTPIN_0, OUTPUT);
   // pinMode(INPIN_0, INPUT);
 
   Serial.begin(115200);
-  // editor.getCursorConfig("/init/param/editor.txt");//エディタカーソルの位置をよみこむ
+  editor.getCursorConfig("/init/param/editor.txt");//エディタカーソルの位置をよみこむ
   delay(50);
   if(firstBootF == true){
     difffileF = false;
@@ -1214,44 +1304,43 @@ void setup()
     }
     else if(isEditMode == TFT_EDIT_MODE)//エディットモードの時
     {
-    //   if(firstBootF == false){
-    //     tft.deleteSprite();
-    //     delay(10);
-    //   }
-    //   setTFTedit(TFT_EDIT_MODE);
+      if(firstBootF == false){
+        tft.deleteSprite();
+        delay(10);
+      }
+      setTFTedit(TFT_EDIT_MODE);
       
-    //   ui.begin( screen, 16, 1, 1);
+      ui.begin( screen, 16, 0, 0);
 
-    //   if(firstBootF == true)
-    //   {
+      if(firstBootF == true)
+      {
 
-    //     if (SPIFFS.exists(appfileName)) {
-    //       File file = SPIFFS.open(appfileName, FILE_READ);
-    //       if (!file) {
-    //         Serial.println("ファイルを開けませんでした");
-    //         return;
-    //       }
-    //       // ファイルからデータを読み込み、シリアルモニターに出力
-    //       while (file.available()) {
-    //         Serial.write(file.read());
-    //       }
-    //       // ファイルを閉じる
-    //       file.close();
-    //     }
+        if (SPIFFS.exists(appfileName)) {
+          File file = SPIFFS.open(appfileName, FILE_READ);
+          if (!file) {
+            Serial.println("ファイルを開けませんでした");
+            return;
+          }
+          // ファイルからデータを読み込み、シリアルモニターに出力
+          while (file.available()) {
+            Serial.write(file.read());
+          }
+          // ファイルを閉じる
+          file.close();
+        }
 
-    //   createAbsUI();
-    //   game = nextGameObject(&appfileName, gameState, mapFileName);//ホームゲームを立ち上げる（オブジェクト生成している）
-    //   game->init();//（オブジェクト生成している）
-    //   // tunes.init();//（オブジェクト生成している）
+      createAbsUI();
+      game = nextGameObject(&appfileName, gameState, mapFileName);//ホームゲームを立ち上げる（オブジェクト生成している）
+      game->init();//（オブジェクト生成している）
+      // tunes.init();//（オブジェクト生成している）
 
-    //   frame=0;
+      frame=0;
 
-    //   // editor.initEditor(tft, EDITOR_ROWS, EDITOR_COLS);
-    //   // editor.initEditor(tft);
-    //   // editor.readFile(SPIFFS, appfileName.c_str());
-    //   // editor.editorOpen(SPIFFS, appfileName.c_str());
-    //   // editor.editorSetStatusMessage("Press ESCAPE to save file");
-    // }
+      editor.initEditor(tft);
+      editor.readFile(SPIFFS, appfileName.c_str());
+      editor.editorOpen(SPIFFS, appfileName.c_str());
+      editor.editorSetStatusMessage("Press ESCAPE to save file");
+    }
   }
   else if(isEditMode == TFT_WIFI_MODE)
   {
@@ -1459,25 +1548,25 @@ void setup()
   //   }
   // }
 
-  screen.setTextSize((std::max(screen.width(), screen.height()) + 255) >> 8);
+  screen.setTextSize((std::max(screen.width(), screen.height()/2) + 255) >> 8);
 
 
     // タッチが使用可能な場合のキャリブレーションを行います。（省略可）
   // if (screen.touch())
   // {
     
-  //   if (screen.width() < screen.height()) screen.setRotation(screen.getRotation() ^ 1);
+  //   if (screen.width() < screen.height()/2) screen.setRotation(screen.getRotation() ^ 1);
 
   //   // 画面に案内文章を描画します。
   //   // screen.setTextDatum(textdatum_t::middle_center);
-  //   // screen.drawString("touch the arrow marker.", screen.width()>>1, screen.height() >> 1);
+  //   // screen.drawString("touch the arrow marker.", screen.width()>>1, screen.height()/2 >> 1);
   //   // screen.setTextDatum(textdatum_t::top_left);
 
   //   // タッチを使用する場合、キャリブレーションを行います。画面の四隅に表示される矢印の先端を順にタッチしてください。
   //   std::uint16_t fg = TFT_WHITE;
   //   std::uint16_t bg = TFT_BLACK;
   //   if (screen.isEPD()) std::swap(fg, bg);
-  //   screen.calibrateTouch(nullptr, fg, bg, std::max(screen.width(), screen.height()) >> 3);
+  //   screen.calibrateTouch(nullptr, fg, bg, std::max(screen.width(), screen.height()/2) >> 3);
   //   // Serial.println(fg);
   // }
 
@@ -1490,15 +1579,34 @@ void setup()
       // ui.showSavedCalData(screen);//タッチキャリブレーションの値を表示
     }
   }  
+
+  lguisetup();
+  textbox.showKeyboard();
 }
 
 uint32_t cnt = ~0;
 int fps=60;//デフォルト
+bool btnpF = false;
+bool prebtnpF = false;
+int btnptick = 0;
+int prebtnptick = 0;
+int btnpms = 0;
+
 unsigned long startTime = millis();
+
+char gkey = ' ';
 
 void loop()
 {
 
+  gui.loop();
+
+  auto osk = gui.getKeyboard();
+  gkey = osk->getKeyCode();
+  keychar = gkey;
+  
+  //--------------------------
+  
   // 現在の時間を取得する
   uint32_t currentTime = millis();
   // 前フレーム処理後からの経過時間を計算する
@@ -1507,9 +1615,146 @@ void loop()
   uint32_t remainTime = (currentTime - preTime);
   preTime = currentTime;
 
+  //---------------------------
+  
+  //--------------------------
+  // if (osk->getKeyCode() == 0) {
+  //     keychar = NULL;
+  //     if(pressedBtnID != -1){buttonState[pressedBtnID] = -1;}
+  //       pressedBtnID = -1;//リセット   
+  // }
+
+  if( ui.getEvent() != NO_EVENT ){//何かイベントがあれば
+      
+    // if( ui.getEvent() == TOUCH ){//TOUCHの時だけ
+    // // if (M5Cardputer.Keyboard.isChange()) {
+
+    // //ボタンが押されているときだけtickがカウントされる
+    // }
+    
+    if(btnpms <= 250){
+
+      if(btnpms==0){btnpF = true; btnptick++;}//最初の0だけtrue
+      else{btnpF = false;pressedBtnID=-1;}
+
+    }else{
+      if(btnpms%500 >= 250){
+        // Serial.println("定期的にtrue");
+        btnpF = true;
+      }else{
+        btnpF = false;
+      }
+      if(btnpF!= prebtnpF)btnptick++;
+    }
+
+    btnpms += elapsedTime;
+    
+    if (btnptick!=prebtnptick) {
+    
+      // Keyboard_Class::KeysState status = M5Cardputer.Keyboard.keysState();//キー状態を取得しておく
+
+      //   if (status.fn) {
+      //     textMoveF=!textMoveF;//スイッチング
+      //   }
+
+      //   if (status.shift) {
+      //     shiftF=!shiftF;//スイッチング
+      //   }
+
+      //   if (status.enter) {
+      //     pressedBtnID = 6;
+      //   }
+        
+      //   for (auto i : status.word) {
+      //     Point2D_t keyPos;
+
+      //     keyPos = M5Cardputer.Keyboard.keyList().at(0);//直前に押されたキーのxy要素を取り出す
+
+      //     if(!shiftF){
+      //       keychar = M5Cardputer.Keyboard.getKeyValue(keyPos).value_first;//対応する文字コードを格納
+      //     }
+      //     else if(shiftF){
+      //       keychar = M5Cardputer.Keyboard.getKeyValue(keyPos).value_second;//対応する文字コードを格納
+      //     }
+
+      //   // if (status.fn&&keychar == PS2_LEFTARROW) {keychar = PS2_LEFTARROW;editor.editorProcessKeypress(keychar, SPIFFS);}
+      //   // if (status.fn&&keychar == PS2_DOWNARROW) {keychar = PS2_DOWNARROW;editor.editorProcessKeypress(keychar, SPIFFS);}
+      //   // if (status.fn&&keychar == PS2_UPARROW) {keychar = PS2_UPARROW;editor.editorProcessKeypress(keychar, SPIFFS);}
+      if (isEditMode == TFT_RUN_MODE) {
+        
+       
+        
+        //通常の文字
+        if(keychar != 0){
+          editor.editorProcessKeypress(keychar, SPIFFS);
+          }
+        
+
+      }else if (isEditMode == TFT_EDIT_MODE){
+        if(textMoveF){
+          
+             if (gkey==',') {
+            keychar = PS2_LEFTARROW;editor.editorMoveCursor(keychar);
+          } else if (gkey=='/') {
+            keychar = PS2_RIGHTARROW;editor.editorMoveCursor(keychar);
+          } else if (gkey==';') {
+            keychar = PS2_UPARROW;editor.editorMoveCursor(keychar);
+          } else if (gkey=='.') {
+            keychar = PS2_DOWNARROW;editor.editorMoveCursor(keychar);
+          } else if (gkey=='|') {
+            pressedBtnID = 9;
+          } else if (gkey=='`') {
+            pressedBtnID = 0;
+          } 
+        }else{
+
+          if (gkey=='~') {
+            pressedBtnID = 0;
+          } else if (gkey=='|') {
+            pressedBtnID = 9;
+          } else {
+            
+            //通常の文字
+            if(keychar != -1){
+              editor.editorProcessKeypress(keychar, SPIFFS);
+              // Serial.println(keychar);
+              }
+              // Serial.println(keychar);
+            }
+        }
+      
+        }
+
+      // }
+
+      // if (status.enter) {
+      //   keychar = PS2_ENTER;
+      //   editor.editorProcessKeypress(keychar, SPIFFS);
+      // }
+
+      // if (status.del) {
+      //   keychar = PS2_DELETE;
+      //   editor.editorProcessKeypress(keychar, SPIFFS);
+      // }      
+    }
+    prebtnpF = btnpF;
+    prebtnptick = btnptick;
+  // }
+
+    if( ui.getEvent() == RELEASE ){//TOUCHの時だけ
+    // if (M5Cardputer.Keyboard.isChange()) {
+      btnptick = 0;
+      btnpms = 0;
+    
+    }
+  }
+
+//--------------------------
+
   ui.update(screen);//タッチイベントを取るので、LGFXが基底クラスでないといけない
   
   if( ui.getEvent() != NO_EVENT ){//何かイベントがあれば
+  drawUI();//UIを表示
     if( ui.getEvent() == TOUCH ){//TOUCHの時だけ
 
       if(pressedBtnID != -1){buttonState[pressedBtnID] = -1;}
@@ -1561,14 +1806,14 @@ if (elapsedTime >= 1000/fps||fps==-1) {
     // == game task ==
     mode = game->run(remainTime);//exitは1が返ってくる　mode=１ 次のゲームを起動
 
-    if(pressedBtnID == 10){//(|)
-    // appfileName = 
-      // editor.editorSave(SPIFFS);//SPIFFSに保存
-      delay(100);//ちょっと待つ
-      reboot(appfileName, TFT_RUN_MODE);//現状rebootしないと初期化が完全にできない
-      // restart(appfileName, 0);//初期化がうまくできない（スプライトなど）
-      // broadchat();//ファイルの中身をブロードキャスト送信する（ファイルは消えない）
-    }
+    // if(pressedBtnID == 10){//(|)
+    // // appfileName = 
+    //   editor.editorSave(SPIFFS);//SPIFFSに保存
+    //   delay(100);//ちょっと待つ
+    //   reboot(appfileName, TFT_RUN_MODE);//現状rebootしないと初期化が完全にできない
+    //   // restart(appfileName, 0);//初期化がうまくできない（スプライトなど）
+    //   // broadchat();//ファイルの中身をブロードキャスト送信する（ファイルは消えない）
+    // }
 
 
     //ESCボタンで強制終了
@@ -1646,45 +1891,20 @@ if (elapsedTime >= 1000/fps||fps==-1) {
     //     toolNo = 0;
     //   }
 
-    
+  tft.setTextSize(1);
+  tft.setFont(&lgfxJapanGothicP_16);
+  tft.setTextColor( TFT_WHITE ,TFT_BLACK );
+  tft.setCursor( 32,32 );
 
+    // tft.print(gui.getKey());
+
+    // auto osk = gui.getKeyboard();
+    tft.print(gkey);
+    
     //Affineを使わない書き方
     tft.setPivot(0, 0);
-
-    tft.pushRotateZoom(&screen, 40 , 0  , 0, 2, 2);//最大1.2倍までしか描画できない//PSRAMを使わないギリギリ
-    // tft.pushRotateZoom(&screen, 40 , 0  , 0, 1, 1);
-    // tft.pushRotateZoom(&screen, 40 , 128, 0, 1.0, 1.0);
-    // tft.pushRotateZoom(&screen, 200, 0  , 0, 1.0, 1.0);
-    // tft.pushRotateZoom(&screen, 200, 128, 0, 1.0, 1.0);
+    tft.pushRotateZoom(&screen, 240 , 0  , 0, 2, 2);//最大1.2倍までしか描画できない//PSRAMを使わないギリギリ
     
-    // for(int yy=0;yy<128;yy++){
-    //   sprite22.fillScreen(TFT_WHITE);
-    //   for(int xx=0;xx<160;xx++){
-    //     sprite22.fillScreen(TFT_BLACK);
-    //     sprite22.pushSprite(&screen, 40+(xx*2) , (yy*2));
-    //   }
-    // }
-    // tft.pushSprite(&screen, 40 , 0);
-    // tft.pushSprite(&screen, 40 , 128, TFT_BLACK);
-    // tft.pushSprite(&screen, 200 , 0, TFT_BLACK);
-    // tft.pushSprite(&screen, 200 , 128, TFT_BLACK);
-    
-    // tft.pushSprite(&screen, 40 , 0 );
-    // tft.pushSprite(&screen, 40 , 128,TFT_BLACK);
-    // tft.pushSprite(&screen, 40 , 1  ,TFT_BLACK);
-    // tft.pushSprite(&screen, 40 , 129,TFT_BLACK);
-
-    // float matrix[6] = {
-    //                 1.0,   // 横1倍
-    //                 0.0,  // 横傾き
-    //                 40.0, // X座標100
-    //                 0.0,   // 縦傾き
-    //                 1.0,   // 縦1倍
-    //                 0.0   // Y座標10
-    //               };
-    // tft.pushAffine(matrix);          
-
-
     // }
     // else if(outputMode == FAST_MODE){
     //   tft.pushSprite(&screen,TFT_OFFSET_X,TFT_OFFSET_Y);//ゲーム画面を小さく高速描画する
@@ -1697,6 +1917,56 @@ if (elapsedTime >= 1000/fps||fps==-1) {
   }
   else if(isEditMode == TFT_EDIT_MODE)
   {
+    
+    
+    editor.editorRefreshScreen(tft);
+
+    float codeunit = 128.0/float(editor.getNumRows());
+    float codelen = codeunit * 14;//14は表示行数
+    // int codelen = int(codelen_f + 0.5); // 四捨五入して整数に変換する
+    
+    float curpos = codeunit*editor.getCy();
+    float codepos = codeunit * (editor.getCy() - editor.getScreenRow());
+    // int codepos = int(codepos_f + 0.5); // 四捨五入して整数に変換する
+    
+    if(!textMoveF)
+    tft.fillRect(124,0, 4,128, HACO3_C5);//コードの全体の長さを表示
+    else
+    tft.fillRect(156,0, 4,128, HACO3_C9);//コードの全体の長さを表示
+
+    if(!shiftF)
+    tft.fillRect(156,int(codepos), 4,codelen, HACO3_C6);//コードの位置と範囲を表示
+    else
+    tft.fillRect(156,int(codepos), 4,codelen, HACO3_C12);//コードの位置と範囲を表示
+
+    if(curpos>=int(codepos)+codelen)//すこしはみ出たら表示コード内に入れる
+    {
+      if(codeunit>=1)curpos = int(codepos)+codelen - codeunit;
+      else curpos = int(codepos)+codelen - 1;
+    }
+
+    if(codeunit>=1){tft.fillRect(155, int(curpos), 4, codeunit, HACO3_C8);}//コードの位置と範囲を表示
+    else{tft.fillRect(155, int(curpos), 4, 1, HACO3_C8);}//１ピクセル未満の時は見えなくなるので１に
+    
+    //最終出力
+    tft.setPivot(0, 0);
+    tft.pushRotateZoom(&screen, 240 , 0  , 0, 2, 2);//最大1.2倍までしか描画できない//PSRAMを使わないギリギリ
+    
+    if(pressedBtnID == 0)//(|)メニュー画面へ
+    {
+      editor.setCursorConfig(0,0,0);//カーソルの位置を保存
+      delay(50);
+      restart("/init/main.lua", TFT_RUN_MODE);
+    }
+
+    if(pressedBtnID == 9){//(|)
+      editor.editorSave(SPIFFS);//SPIFFSに保存
+      delay(100);//ちょっと待つ
+      reboot(appfileName, TFT_RUN_MODE);//現状rebootしないと初期化が完全にできない
+      // restart(appfileName, 0);//初期化がうまくできない（スプライトなど）
+      // broadchat();//ファイルの中身をブロードキャスト送信する（ファイルは消えない）
+    }
+
     // editor.editorRefreshScreen(tft);
 
     // float codeunit = 128.0/float(editor.getNumRows());
@@ -1710,7 +1980,9 @@ if (elapsedTime >= 1000/fps||fps==-1) {
     // if(codeunit>=1){tft.fillRect(155, int(curpos), 4, codeunit, HACO3_C8);}//コードの位置と範囲を表示
     // else{tft.fillRect(155, int(curpos), 4, 1, HACO3_C8);}//１ピクセル未満の時は見えなくなるので１に
     
-    // tft.pushSprite(&screen, 60, 0);
+    // // tft.pushSprite(&screen, 60, 0);
+    // tft.setPivot(0, 0);
+    // tft.pushRotateZoom(&screen, 112 , 0  , 0, 2, 2);//最大1.2倍までしか描画できない//PSRAMを使わないギリギリ
     
     // if(pressedBtnID == 0)//ESC
     // {
