@@ -11,3 +11,7 @@ Panel_ST7701::getInitCommands
 0x20,  0,  // ノーマルにしてください。0x21 IPS用だと色反転してしまいます。
 0x3A,  1, 0x70, // こちらも、0x70 RGB888で24ビットにしてさい。0x60 RGB666, 0x50 RGB565だと色がおかしくなります。
 
+
+ST7701のデータシートはこちらです。
+
+https://www.crystalfontz.com/controllers/datasheet-viewer.php?id=495
