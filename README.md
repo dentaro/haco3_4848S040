@@ -15,3 +15,7 @@ Panel_ST7701::getInitCommands
 ST7701のデータシートはこちらです。
 
 https://www.crystalfontz.com/controllers/datasheet-viewer.php?id=495
+
+data.zip
+lib/lua‐5.3.zip
+は解凍してください。
