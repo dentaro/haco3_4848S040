@@ -15,9 +15,9 @@
 #define TFT_OFFSET_Y 0
 #define RAD_ONE PI/180
 
-#define TFT_WIDTH 128
+#define TFT_WIDTH 160
 #define TFT_HEIGHT 128
-#define TFT_WIDTH_HALF 64
+#define TFT_WIDTH_HALF 80
 #define TFT_HEIGHT_HALF 64
 
 // #define PNG_SPRITE_WIDTH 64

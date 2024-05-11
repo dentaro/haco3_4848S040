@@ -1,7 +1,6 @@
 
 #include "Editor.h"
 
-// extern PS2Keyboard keyboard;
 extern char keychar;
 extern bool firstBootF;
 extern uint8_t isEditMode;
