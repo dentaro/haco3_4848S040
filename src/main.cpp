@@ -54,7 +54,6 @@ static int menu_y = 20;
 static int menu_w = 120;
 static int menu_h = 30;
 static int menu_padding = 36;
-// uint8_t toolNo = 0;
 
 #define MAPWH 16//マップのpixelサイズ
 
@@ -103,8 +102,26 @@ String enemyPath = "";
 uint8_t toolNo = 0;
 int gameState = 0;
 
+uint8_t sfxlistNo = 0;
+uint8_t sfxnos[8] ={0,1,2,3,4,5,6,7};
+
+uint8_t loopStart = 0;
+uint8_t loopEnd = 63;
+uint8_t looplen = (loopEnd - loopStart)+1;
+float bpm = 120;
+
+// // //音関連
+uint8_t buffAreaNo = 0;
+uint8_t gEfectNo = 0;
+uint8_t effectVal = 0.0f;
+uint8_t toneTickNo = 0;
+uint8_t sfxTickNo = 0;
+uint8_t instrument = 0;
+uint8_t targetChannelNo = 0;//描画編集する効果音番号を設定（sfx(n)のnで効果音番号を指定することで作った効果音がなる）
+uint8_t tickTime = 125;//125ms*8chはbpm60
+uint8_t tickSpeed = 5;//連動してない
+
 std::deque<int> buttonState;//ボタンの個数未定
-// int buttonState[9];
 
 enum struct FileType {
   LUA,
@@ -1115,6 +1132,7 @@ void lguisetup(){
   gui.smoothMove = 32;           // スムーズ移動係数 (0でスムーズ移動無効)
 
 //*/
+  gui.smoothMove = 0;
 
   // スクリーンキーボードの設定
   auto osk = gui.getKeyboard();
@@ -1124,7 +1142,6 @@ void lguisetup(){
   auto osk_hight = osk->getDestRect().height();
 
   textbox.setDestRect(0, screen.height()-osk_hight-16, screen.width(), 16);
-
   textbox.setHideRect(0, screen.height()-osk_hight-16, 0, 16);
   textbox.hide();
 
@@ -1143,8 +1160,7 @@ void setup()
   // pinMode(INPIN_0, INPUT);
 
   Serial.begin(115200);
-  editor.getCursorConfig("/init/param/editor.txt");//エディタカーソルの位置をよみこむ
-  delay(50);
+
   if(firstBootF == true){
     difffileF = false;
 
@@ -1160,6 +1176,9 @@ void setup()
     }
   }
 
+  editor.getCursorConfig("/init/param/editor.txt");//エディタカーソルの位置をよみこむ
+  delay(50);
+  
   getOpenConfig();//最初に立ち上げるゲームのパスとモードをSPIFFSのファイルopenconfig.txtから読み込む
   //この時点でappfileNameも更新される
 
@@ -1174,7 +1193,7 @@ void setup()
 
     screen.setBrightness(255);
     screen.fillScreen(TFT_BLACK);
-    drawUI();//UIを表示
+    // drawUI();//UIを表示
     sprite88_0.setPsram(false );
     sprite88_0.setColorDepth(16);//子スプライトの色深度
     sprite88_0.createSprite(8, 8);//ゲーム画面用スプライトメモリ確保
@@ -1534,37 +1553,18 @@ void setup()
   //   }
   // }
 
-  screen.setTextSize((std::max(screen.width(), screen.height()/2) + 255) >> 8);
+  drawUI();//UIを表示
 
+  // screen.setTextSize((std::max(screen.width(), screen.height()/2) + 255) >> 8);
 
-    // タッチが使用可能な場合のキャリブレーションを行います。（省略可）
-  // if (screen.touch())
-  // {
-    
-  //   if (screen.width() < screen.height()/2) screen.setRotation(screen.getRotation() ^ 1);
-
-  //   // 画面に案内文章を描画します。
-  //   // screen.setTextDatum(textdatum_t::middle_center);
-  //   // screen.drawString("touch the arrow marker.", screen.width()>>1, screen.height()/2 >> 1);
-  //   // screen.setTextDatum(textdatum_t::top_left);
-
-  //   // タッチを使用する場合、キャリブレーションを行います。画面の四隅に表示される矢印の先端を順にタッチしてください。
-  //   std::uint16_t fg = TFT_WHITE;
-  //   std::uint16_t bg = TFT_BLACK;
-  //   if (screen.isEPD()) std::swap(fg, bg);
-  //   screen.calibrateTouch(nullptr, fg, bg, std::max(screen.width(), screen.height()/2) >> 3);
-  //   // Serial.println(fg);
-  // }
-
-
-  if(ui.getCalF()){
-    // タッチが使用可能な場合のキャリブレーションを行います。（省略可）
-    if (screen.touch())
-    {
-      ui.touchCalibration(screen);//タッチキャリブレーションを実行
-      // ui.showSavedCalData(screen);//タッチキャリブレーションの値を表示
-    }
-  }  
+  // if(ui.getCalF()){
+  //   // タッチが使用可能な場合のキャリブレーションを行います。（省略可）
+  //   if (screen.touch())
+  //   {
+  //     ui.touchCalibration(screen);//タッチキャリブレーションを実行
+  //     // ui.showSavedCalData(screen);//タッチキャリブレーションの値を表示
+  //   }
+  // }  
 
   lguisetup();
   textbox.showKeyboard();
@@ -1626,57 +1626,6 @@ void loop()
   uint32_t remainTime = (currentTime - preTime);
   preTime = currentTime;
 
-  //---------------------------
-  
-  //--------------------------
-  // if (osk->getKeyCode() == 0) {
-  //     keychar = NULL;
-  //     if(pressedBtnID != -1){buttonState[pressedBtnID] = -1;}
-  //       pressedBtnID = -1;//リセット   
-  // }
-
-  if( ui.getEvent() != NO_EVENT ){//何かイベントがあれば
-      
-    // if( ui.getEvent() == TOUCH ){//TOUCHの時だけ
-    // // if (M5Cardputer.Keyboard.isChange()) {
-
-    // //ボタンが押されているときだけtickがカウントされる
-    // }
-    
-    // if(btnpms <= 250){
-
-    //   if(btnpms==0){btnpF = true; btnptick++;}//最初の0だけtrue
-    //   else{btnpF = false;pressedBtnID=-1;}
-
-    // }else{
-    //   if(btnpms%500 >= 250){
-    //     // Serial.println("定期的にtrue");
-    //     btnpF = true;
-    //   }else{
-    //     btnpF = false;
-    //   }
-    //   if(btnpF!= prebtnpF)btnptick++;
-    // }
-
-    
-
-    // btnpms += elapsedTime;
-    
-    // if (btnptick!=prebtnptick) {
-    
-    // }
-    prebtnpF = btnpF;
-    prebtnptick = btnptick;
-  // }
-
-    if( ui.getEvent() == RELEASE ){//TOUCHの時だけ
-    // if (M5Cardputer.Keyboard.isChange()) {
-      btnptick = 0;
-      btnpms = 0;
-    
-    }
-  }
-
 //--------------------------
 
   ui.update(screen);//タッチイベントを取るので、LGFXが基底クラスでないといけない
@@ -1686,27 +1635,95 @@ void loop()
   drawUI();//UIを表示
 
   //ボタンが押されているときだけtickがカウントされる
+  int firstwaitms = 1000;
     
-    if(btnpms <= 250){
+    // if(btnpms == 0){
+    //   btnpF = true; 
+    //   // btnptick++;
+    //   // textMoveF=true;
+    //   // if(btnpms==0){btnpF = true; btnptick++;}//最初の0だけtrue
+    //   // else{btnpF = false;pressedBtnID=-1;}
 
-      if(btnpms==0){btnpF = true; btnptick++;}//最初の0だけtrue
-      else{btnpF = false;pressedBtnID=-1;}
+    // }else{
 
-    }else{
-      if(btnpms%500 >= 250){
-        // Serial.println("定期的にtrue");
+      if(btnpms <= 150)
+      {
         btnpF = true;
+        textMoveF=true;
       }else{
-        btnpF = false;
+
+        if(btnpms%300 >= 150)
+        {
+          // Serial.println("定期的にtrue");
+          btnpF = false;
+          
+        }else{
+          btnpF = true;
+        }
+
+        if(btnpF!= prebtnpF)btnptick++;
+
+        if (btnptick!=prebtnptick) {
+          
+          if(btnptick<=1||btnptick>=5)
+          textMoveF=true;
+          else
+          textMoveF=false;
+
+        }else{
+          textMoveF=false;
+        }
       }
-      if(btnpF!= prebtnpF)btnptick++;
-    }
+
+      
+
+    // }
+
+    // if(btnptick==0){
+    //   textMoveF=true;
+    // }
 
     btnpms += elapsedTime;
-    
-    if (btnptick!=prebtnptick) {
-      textMoveF=!textMoveF;//スイッチング
-    }
+    prebtnpF = btnpF;
+    prebtnptick = btnptick;
+
+  //ボタンが押されているときだけtickがカウントされる
+  //btnpms//    0123456...
+  //btnpF//     |||||___|||||____|||||____|||||____ //一定時間ずつフラグを立てる
+  //textMoveF// |____________|___|____|___|____|    //差があった時にtrueになる最初firstwaitms分はフラグたてない
+
+    // uint16_t firstwaitms = 1000;
+
+    // if(btnpms <= 50){
+
+    //   if(btnpms==0){btnpF = true; btnptick++;textMoveF=true;}//最初の0だけtrue
+    //   else{btnpF = false;pressedBtnID=-1;}
+
+    // }else{
+
+    //   if(btnpms%100 >= 50)
+    //   {
+    //     // Serial.println("定期的にtrue");
+    //     btnpF = true;
+    //   }else{
+    //     btnpF = false;
+    //   }
+
+    //   if(btnpF!= prebtnpF)btnptick++;
+    // }
+
+    // if (btnptick!=prebtnptick) {
+    //   if(btnpms>=firstwaitms){//最初の待ち時間はフラグ立てない
+    //     textMoveF=true;
+    //   }else{
+    //     textMoveF=false;
+    //   }
+    // }else{
+    //   if(btnpms>=firstwaitms){
+    //     textMoveF=false;
+    //   }
+    // }
+
     
 
     if( ui.getEvent() == TOUCH ){//TOUCHの時だけ
@@ -1734,6 +1751,7 @@ void loop()
       btnpms = 0;
       pressedBtnID = -1;//リセット
     }
+    
   }
 
   
@@ -1758,6 +1776,7 @@ if (elapsedTime >= 1000/fps||fps==-1) {
     mode = game->run(remainTime);//exitは1が返ってくる　mode=１ 次のゲームを起動
 
     if(pressedBtnID == 12){//RUN<-->EDIT切り替え
+      
       reboot(appfileName, TFT_EDIT_MODE);//現状rebootしないと初期化が完全にできない
     }
 
@@ -1765,6 +1784,9 @@ if (elapsedTime >= 1000/fps||fps==-1) {
     //ESCボタンで強制終了
     if (pressedBtnID == 0)
     { // reload
+
+      editor.setCursorConfig(0,0,0);//カーソルの位置を保存
+      delay(50);
 
       appfileName = "/init/main.lua";
 
@@ -1860,7 +1882,8 @@ if (elapsedTime >= 1000/fps||fps==-1) {
 
 
     tft.setPivot(0, 0);
-    tft.pushRotateZoom(&screen, 160 , 0  , 0, 2, 2);
+    tft.pushRotateZoom(&screen, TFT_POSX , TFT_POSY  , 0, 2, 2);
+    // tft.pushRotateZoom(&screen, 0 , 0  , 0, 2, 2);
 
     // tft.pushSprite(&tft2, 0 , 0);//最大1.2倍までしか描画できない//PSRAMを使わないギリギリ
     // tft2.pushRotateZoom(&screen, 0 , 0  , 0, 2, 2);
@@ -1882,6 +1905,7 @@ if (elapsedTime >= 1000/fps||fps==-1) {
   {
     
     if(textMoveF)
+    // if(btnpF)
       {
                if (pressedBtnID == 1) {
           keychar = PS2_LEFTARROW;editor.editorMoveCursor(keychar);
@@ -1939,7 +1963,8 @@ if (elapsedTime >= 1000/fps||fps==-1) {
     
     //最終出力
     tft.setPivot(0, 0);
-    tft.pushRotateZoom(&screen, 160 , 0  , 0, 2, 2);//最大1.2倍までしか描画できない//PSRAMを使わないギリギリ
+    tft.pushRotateZoom(&screen, TFT_POSX , TFT_POSY  , 0, 2, 2);//最大1.2倍までしか描画できない//PSRAMを使わないギリギリ
+    // tft.pushRotateZoom(&screen, 0 , 0  , 0, 2, 2);//最大1.2倍までしか描画できない//PSRAMを使わないギリギリ
     
     if(pressedBtnID == 0)//(|)メニュー画面へ
     {
@@ -1949,6 +1974,7 @@ if (elapsedTime >= 1000/fps||fps==-1) {
     }
 
     if(pressedBtnID == 12){//RUN<-->EDIT切り替え
+      
       editor.editorSave(SPIFFS);//SPIFFSに保存
       delay(100);//ちょっと待つ
       reboot(appfileName, TFT_RUN_MODE);//現状rebootしないと初期化が完全にできない
@@ -2017,13 +2043,12 @@ if (elapsedTime >= 1000/fps||fps==-1) {
   }
 
     startTime = currentTime;
-}
+  }
+
+  
 
   frame++;
   if(frame > 18446744073709551615)frame = 0;
-
-
-  
 
   delay(1);
   

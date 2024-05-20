@@ -11,6 +11,8 @@
 #define FAST_MODE 1
 // #define WIDE_MODE 2 //倍率になっています。
 
+
+
 #define TFT_OFFSET_X 60
 #define TFT_OFFSET_Y 0
 #define RAD_ONE PI/180
@@ -19,6 +21,10 @@
 #define TFT_HEIGHT 128
 #define TFT_WIDTH_HALF 80
 #define TFT_HEIGHT_HALF 64
+
+#define TFT_POSX 160
+#define TFT_POSY 0
+#define SCALE_X 2
 
 // #define PNG_SPRITE_WIDTH 64
 // #define PNG_SPRITE_HEIGHT 128

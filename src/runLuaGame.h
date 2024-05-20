@@ -17,14 +17,15 @@
 
 #include <chrono> // std::chrono
 #include <thread> // std::this_thread
-// #include <vector> 
+// #include <stdbool.h>
+
+#include "vector.h"//自作vector
 
 extern "C"{
 #include <lua.h>
 #include <lualib.h>
 #include <lauxlib.h>
 }
-
 
 #ifndef RUN_LUA_GAME_H
 #define RUN_LUA_GAME_H
@@ -36,6 +37,37 @@ extern "C"{
 // #define LUA_BUFFERSIZE_PS (LUA_BUFFERSIZE * 2)
 
 #define LUA_BUFSIZE 1024
+
+#define COLOR_COUNT 256 // 色のカウント、必要に応じて調整してください
+#define ASCII_CHARACTER_COUNT 128 // ASCII 文字のカウント
+
+typedef struct {
+  unsigned char r;
+  unsigned char g;
+  unsigned char b;
+} ColorRgb;
+
+// Collision
+/// \cond
+typedef struct
+{
+  int rectIndex;
+  int textIndex;
+  int characterIndex;
+  Vector pos;
+  Vector size;
+} HitBox;
+
+
+typedef struct {
+    bool rect[COLOR_COUNT];
+    bool text[ASCII_CHARACTER_COUNT];
+    bool character[ASCII_CHARACTER_COUNT];
+} Collisions;
+
+typedef struct {
+    Collisions isColliding;
+} Collision;
 
 struct LoadF {
   File f;
@@ -193,6 +225,7 @@ static int l_initstars(lua_State* L);
     // static int l_phbtn(lua_State* L);
     static int l_key(lua_State* L);
     static int l_btn(lua_State* L);
+    static int l_box(lua_State* L);
     static int l_touch(lua_State* L);
     static int l_btnp(lua_State* L);
     static int l_sldr(lua_State* L);
@@ -215,11 +248,13 @@ static int l_initstars(lua_State* L);
     static int l_win(lua_State* L);
     static int l_tool(lua_State* L);
     static int l_print(lua_State* L);
+    static int l_gini(lua_State* L);
     static int l_gstat(lua_State* L);
     static int l_go2(lua_State* L);
     static int l_sfx(lua_State* L);
     static int l_music(lua_State* L);
     static int l_fset(lua_State* L);
+    static int l_mset(lua_State* L);
     static int l_mget(lua_State* L);
     static int l_fget(lua_State* L);
     static int l_reboot(lua_State* L);
@@ -267,7 +302,7 @@ Vector3<float> normalize(float x, float y, float z);
 float calculateDotProduct(const Vector3<float>& v1, const Vector3<float>& v2);
 Vector3<float> calculateNormal(const Vector3<float>& v1, const Vector3<float>& v2, const Vector3<float>& v3);
 float calculateBrightness(const Vector3<float>& v1, const Vector3<float>& v2, const Vector3<float>& v3, const LightObj& light);
-
+// Collision box(float x, float y, float width, float height);
 // virtual void haco8resume(){};//派生クラスに書き換えられるダミー関数
     void resume();
     void init();
