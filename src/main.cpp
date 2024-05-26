@@ -28,6 +28,9 @@ using namespace std;
 #include "Editor.h"
 
 
+bool isSoftLED[LED_NUM];
+
+
 //キーボード関連
 Editor editor;
 
@@ -93,11 +96,13 @@ uint8_t sfxVol = 0;
 float sfxspeed = 100;
 uint8_t patternNo = 0;//0~63
 
-bool enemyF = false;
-uint8_t enemyX = 0;
-uint8_t enemyY = 0;
-uint8_t enemyTransCn = 0;
-String enemyPath = "";
+uint8_t bgmodeNo = 0;
+uint8_t pngimgW = 0;
+uint8_t pngimgH = 0;
+uint8_t pngimgX = 0;
+uint8_t pngimgY = 0;
+uint8_t pngimgTransCn = 0;
+String pngimgPath = "";
 
 uint8_t toolNo = 0;
 int gameState = 0;
@@ -1152,13 +1157,32 @@ void lguisetup(){
   // gui.addControl(&grid);
 }
 
+void ledSetup()
+{
+for(int n=0; n<LED_NUM; n++)
+  {
+    isSoftLED[n] = false;
+  }
+}
+void ledUpdate(){
+  for(int n=0; n<LED_NUM; n++)
+  {
+    if(isSoftLED[n]==true){
+      screen.fillCircle(8+19*n,16,8,TFT_RED);
+      screen.fillCircle(4+19*n,12,2,TFT_WHITE);
+    }else{
+      screen.fillCircle(8+19*n,16,8,TFT_DARKGRAY);
+    }
+    screen.drawCircle(8+19*n,16,8,TFT_LIGHTGRAY);
+  }
+}
 
 void setup()
 {
   
+  ledSetup();
   // pinMode(OUTPIN_0, OUTPUT);
   // pinMode(INPIN_0, INPUT);
-
   Serial.begin(115200);
 
   if(firstBootF == true){
@@ -1204,21 +1228,13 @@ void setup()
 
     sprite64.drawPngFile(SPIFFS, "/init/initspr.png", 0, 0);//一時展開する
 
-    //色番号配列化
-    // for(int y=0;y<PNG_SPRITE_HEIGHT;y++){
-    //   for(int x=0;x<PNG_SPRITE_WIDTH;x++){
-    //     if(x%2 == 0){
-    //       sprite64cnos[(y*PNG_SPRITE_WIDTH+x)] = (readpixel(x  , y) << 4) | (readpixel(x+1, y) & 0b00001111);//ニコイチにして格納
-    //     }
-    //   }
-    // }
-
     sprite64cnos_vector.clear();//初期化処理
 
+    //色番号配列化
     for(int y = 0; y < PNG_SPRITE_HEIGHT; y++) {
         for(int x = 0; x < PNG_SPRITE_WIDTH; x++) {
           if(x%2 == 0){
-            uint8_t pixel_data = (readpixel(x, y) << 4) | (readpixel(x + 1, y) & 0b00001111);
+            uint8_t pixel_data = (readpixel(x, y) << 4) | (readpixel(x + 1, y) & 0b00001111);//ニコイチにして格納
             sprite64cnos_vector.push_back(pixel_data);
           }
         }
@@ -1675,14 +1691,6 @@ void loop()
         }
       }
 
-      
-
-    // }
-
-    // if(btnptick==0){
-    //   textMoveF=true;
-    // }
-
     btnpms += elapsedTime;
     prebtnpF = btnpF;
     prebtnptick = btnptick;
@@ -1692,40 +1700,11 @@ void loop()
   //btnpF//     |||||___|||||____|||||____|||||____ //一定時間ずつフラグを立てる
   //textMoveF// |____________|___|____|___|____|    //差があった時にtrueになる最初firstwaitms分はフラグたてない
 
-    // uint16_t firstwaitms = 1000;
-
-    // if(btnpms <= 50){
-
-    //   if(btnpms==0){btnpF = true; btnptick++;textMoveF=true;}//最初の0だけtrue
-    //   else{btnpF = false;pressedBtnID=-1;}
-
-    // }else{
-
-    //   if(btnpms%100 >= 50)
-    //   {
-    //     // Serial.println("定期的にtrue");
-    //     btnpF = true;
-    //   }else{
-    //     btnpF = false;
-    //   }
-
-    //   if(btnpF!= prebtnpF)btnptick++;
-    // }
-
-    // if (btnptick!=prebtnptick) {
-    //   if(btnpms>=firstwaitms){//最初の待ち時間はフラグ立てない
-    //     textMoveF=true;
-    //   }else{
-    //     textMoveF=false;
-    //   }
-    // }else{
-    //   if(btnpms>=firstwaitms){
-    //     textMoveF=false;
-    //   }
-    // }
-
+    if(textMoveF)//どのモードでもbtnpに反応する
+    {
+      ledUpdate();
+    }
     
-
     if( ui.getEvent() == TOUCH ){//TOUCHの時だけ
 
       if(pressedBtnID != -1){buttonState[pressedBtnID] = -1;}
@@ -1750,6 +1729,7 @@ void loop()
       btnptick = 0;
       btnpms = 0;
       pressedBtnID = -1;//リセット
+
     }
     
   }
@@ -1820,44 +1800,38 @@ if (elapsedTime >= 1000/fps||fps==-1) {
       sfxflag = false;
       musicflag = false;
       fps = 60;
+      bgmodeNo = 0;//bgなしモードにリセット
       // txtName = appfileName;
       game = nextGameObject(&appfileName, gameState, mapFileName);//ファイルの種類を判別して適したゲームオブジェクトを生成
       game->init();//resume()（再開処理）を呼び出し、ゲームで利用する関数などを準備
       // tunes.resume();
     }
     
+
+    if(bgmodeNo==2)
+    {
+      //  tft.drawPngFile(SPIFFS, pngimgPath, pngimgX, pngimgY, 160,128,0,0, 160/pngimgW, 128/pngimgH);
+      tft.drawPngFile(SPIFFS, pngimgPath, pngimgX, pngimgY,0,0, 0,0);//tftに直接展開する
+      // tft.drawPngFile(SPIFFS, pngimgPath, pngimgX, pngimgY, 0,0,0,0, 160/float(pngimgW), 128/float(pngimgH));//tftに直接展開する
+    }
+
     // ui.showTouchEventInfo( tft, 0, 100 );//タッチイベントを視覚化する
     // if(patternNo<10)tft.fillRect(200,120,16,8,TFT_BLACK);
     ui.showInfo( tft, 200, 112 );//ボタン情報、フレームレート情報などを表示します。
     // tft.setCursor(200,120);
     // tft.println(patternNo);
-    
 
-    // if(enemyF){
+      // if(toolNo != 0){
+      //   if(toolNo==1){//カラーパレット
+      //     for(int j = 0; j<8; j++){
+      //       for(int i = 0; i<2; i++){
+      //         tft.fillRect(i*16,j*16,16,16,gethaco3Col(j*2+i));
+      //       }
+      //     }
+      //   }
 
-    //   sprite64.setPsram(false);
-    //   sprite64.setColorDepth(16);    // 子スプライトの色深度
-    //   sprite64.createSprite(48, 48); // ゲーム画面用スプライトメモリ確保
-
-    //   // sprite64.drawPngFile(SPIFFS, enemyPath, enemyX, enemyY);//sprite64に展開する
-    //   sprite64.pushRotateZoom(&tft, enemyX, enemyY, 0, 1, 1, gethaco3Col(enemyTransCn));
-
-    //   sprite64.deleteSprite();//消す
-
-    //   // tft.drawPngFile(SPIFFS, enemyPath, enemyX, enemyY);//直接展開する
-    // }
-
-    //   if(toolNo != 0){
-    //     if(toolNo==1){//カラーパレット
-    //       for(int j = 0; j<8; j++){
-    //         for(int i = 0; i<2; i++){
-    //           tft.fillRect(i*16,j*16,16,16,gethaco3Col(j*2+i));
-    //         }
-    //       }
-    //     }
-
-    //     toolNo = 0;
-    //   }
+      //   toolNo = 0;
+      // }
 
   tft.setTextSize(1);
   tft.setFont(&lgfxJapanGothicP_16);
@@ -1884,6 +1858,7 @@ if (elapsedTime >= 1000/fps||fps==-1) {
     tft.setPivot(0, 0);
     tft.pushRotateZoom(&screen, TFT_POSX , TFT_POSY  , 0, 2, 2);
     // tft.pushRotateZoom(&screen, 0 , 0  , 0, 2, 2);
+    
 
     // tft.pushSprite(&tft2, 0 , 0);//最大1.2倍までしか描画できない//PSRAMを使わないギリギリ
     // tft2.pushRotateZoom(&screen, 0 , 0  , 0, 2, 2);
@@ -1917,6 +1892,7 @@ if (elapsedTime >= 1000/fps||fps==-1) {
           keychar = PS2_DOWNARROW;editor.editorMoveCursor(keychar);
         }
 
+        // ledUpdate();
 
       }else{
         //通常の文字
@@ -2044,6 +2020,17 @@ if (elapsedTime >= 1000/fps||fps==-1) {
 
     startTime = currentTime;
   }
+
+  // for(int n=0; n<LED_NUM; n++)
+  // {
+  //   if(isSoftLED[n]==true){
+  //     screen.fillCircle(8+16*n,16,8,TFT_RED);
+  //   }else{
+  //     screen.fillCircle(8+16*n,16,8,TFT_DARKGRAY);
+  //   }
+  //   screen.drawCircle(8+16*n,16,8,TFT_WHITE);
+  // }
+  
 
   
 

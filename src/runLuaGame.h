@@ -4,7 +4,7 @@
 #include <WiFiClientSecure.h>
 #include <FS.h>
 #include <LovyanGFX_DentaroUI.hpp>
-
+#include "FS.h"
 #include "SPIFFS.h"
 #include "baseGame.h"
 // #include "Tunes.h"
@@ -233,6 +233,7 @@ static int l_initstars(lua_State* L);
     static int l_appmode(lua_State* L);
     static int l_appinfo(lua_State* L);
     static int l_editor(lua_State* L);
+    static int l_led(lua_State* L);
     static int l_list(lua_State* L);
     static int l_line(lua_State* L);
 

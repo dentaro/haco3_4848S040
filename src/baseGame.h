@@ -37,6 +37,8 @@
 #define OUTPIN_0 16
 #define INPIN_0  17
 
+#define LED_NUM 8
+
 // #define MAX_CHAR 1
 #define MAX_CHAR 512//1024
 
